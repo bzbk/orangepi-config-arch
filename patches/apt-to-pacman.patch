@@ -1,0 +1,451 @@
+diff -ruN --label upstream/usr/lib/orangepi-config --label src/usr/lib/orangepi-config upstream/usr/lib/orangepi-config src/usr/lib/orangepi-config
+--- upstream/usr/lib/orangepi-config
++++ src/usr/lib/orangepi-config
+@@ -53,7 +53,7 @@
+ # Source repository: https://github.com/ssinyagin/wwan_udev_rules
+ 
+ if ! check_if_installed ppp then; then
+-	apt-get -y -qq install ppp >/dev/null 2>&1
++	pacman -S --noconfirm --needed ppp >/dev/null 2>&1
+ fi
+ cat >/etc/udev/rules.d/99-wwan.rules <<'EOT'
+ 
+diff -ruN --label upstream/usr/lib/orangepi-config --label src/usr/lib/orangepi-config upstream/usr/lib/orangepi-config src/usr/lib/orangepi-config
+--- upstream/usr/lib/orangepi-config
++++ src/usr/lib/orangepi-config
+@@ -40,8 +40,8 @@
+ 		if is_package_manager_running; then
+ 			sleep 3
+ 		fi
+-		debconf-apt-progress -- apt-get update
+-		debconf-apt-progress -- apt -y -qq --allow-downgrades --no-install-recommends install lsb-release
++		pacman -Sy --noconfirm
++		pacman -S --noconfirm --needed lsb-release
+ 	fi
+ 
+ 	[[ -f /etc/orangepi-release ]] && source /etc/orangepi-release && ORANGEPI="Orange Pi $VERSION $IMAGE_TYPE";
+@@ -57,6 +57,7 @@
+ 	[[ -z "${DEFAULT_ADAPTER// }" ]] && DEFAULT_ADAPTER="lo"
+ 	OVERLAYDIR="/boot/dtb/overlay";
+ 	[[ "$LINUXFAMILY" == "sunxi64" ]] && OVERLAYDIR="/boot/dtb/allwinner/overlay";
++	[[ "$LINUXFAMILY" == "sun60iw2" ]] && OVERLAYDIR="/boot/dtb/allwinner/overlay";
+ 	[[ "$LINUXFAMILY" == "meson64" ]] && OVERLAYDIR="/boot/dtb/amlogic/overlay";
+ 	[[ "$LINUXFAMILY" == "rockchip64" ]] && OVERLAYDIR="/boot/dtb/rockchip/overlay";
+ 	[[ "$LINUXFAMILY" == "rockchip-rk3588" ]] && OVERLAYDIR="/boot/dtb/rockchip/overlay";
+@@ -188,8 +189,7 @@
+ #
+ check_if_installed (){
+ 
+-	local DPKG_Status="$(dpkg -s "$1" 2>/dev/null | awk -F": " '/^Status/ {print $2}')"
+-	if [[ "X${DPKG_Status}" = "X" || "${DPKG_Status}" = *deinstall* ]]; then
++	if ! pacman -Q "$1" >/dev/null 2>&1; then
+ 		return 1
+ 	else
+ 		return 0
+@@ -205,7 +205,7 @@
+ #
+ function is_package_manager_running() {
+ 
+-	if ps -C apt-get,apt,dpkg >/dev/null ; then
++	if ps -C pacman >/dev/null ; then
+ 		[[ -z $scripted ]] && dialog --colors --title " \Z1Error\Z0 " --backtitle "$BACKTITLE" --no-collapse --msgbox \
+ 		"\n\Z0Package manager is running in the background. \n\nCan't install dependencies. Try again later." 9 53
+ 		return 0
+@@ -374,20 +374,20 @@
+ 	fi
+ 
+ 	clear
+-	debconf-apt-progress -- apt-get update
++	pacman -Sy --noconfirm
+ 
+ 	# must exits
+ 	PACKAGE_INSTALL="linux-image-${BRANCH}-${LINUXFAMILY} linux-dtb-${BRANCH}-${LINUXFAMILY}"
+ 	PACKAGE_PURGE="linux-image* linux-dtb*"
+ 
+ 	# create install and remove logic
+-	command=$(LC_ALL=C apt-get --download-only --simulate --allow-downgrades -y --no-install-recommends install linux-${DISTROID}-root-${BRANCH}-${BOARD} 2>/dev/null)
++	command=""
+ 	if [[ $? -eq 0 && -z $(echo $command | grep "not possible") ]]; then
+ 		PACKAGE_INSTALL+=" linux-${DISTROID}-root-${BRANCH}-${BOARD}"
+ 		PACKAGE_PURGE+=" linux-${DISTROID}-root*"
+ 	fi
+ 
+-	command=$(LC_ALL=C apt-get --download-only --simulate --reinstall --allow-downgrades -y --no-install-recommends install linux-u-boot-${BOARD}-${BRANCH} 2>/dev/null)
++	command=""
+ 	if [[ $? -eq 0 && -z $(echo $command | grep "not possible") ]]; then
+ 		PACKAGE_INSTALL+=" linux-u-boot-${BOARD}-${BRANCH}"
+ 		PACKAGE_PURGE+=" linux-u-boot-${BOARD}-*"
+@@ -403,11 +403,11 @@
+ 		PACKAGE_PURGE+=" linux-headers*"
+ 	fi
+ 
+-	debconf-apt-progress -- apt-get -o Dpkg::Options::="--force-confold" --force-yes --download-only --allow-downgrades -y --no-install-recommends install $PACKAGE_INSTALL
++	true
+ 	# if download is ok, remove old packages
+ 	if [[ $? = 0 ]]; then
+ 
+-		debconf-apt-progress -- apt-get -y -qq purge $PACKAGE_PURGE
++		pacman -Rns --noconfirm $PACKAGE_PURGE 2>/dev/null
+ 		find "/boot/" -name "System.map*" -type f -delete
+ 		find "/boot/" -name "config*" -type f -delete
+ 		find "/boot/" -name "vmlinuz*" -type f -delete
+@@ -416,13 +416,12 @@
+ 
+ 		# install packages
+ 		echo $PACKAGE_INSTALL >> /var/log/upgrade.log
+-		debconf-apt-progress -- apt-get -y -qq --allow-downgrades --no-install-recommends --reinstall \
+-		-o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install $PACKAGE_INSTALL
++		pacman -S --noconfirm --needed $PACKAGE_INSTALL 2>/dev/null
+ 
+ 		if [[ $? -eq 1 ]]; then
+ 			echo "Something went wrong ... check logs."; exit;
+ 		else
+-			apt clean
++			pacman -Sc --noconfirm
+ 		fi
+ 
+ 	fi
+@@ -452,7 +451,7 @@
+ 	[[ ${LINUXFAMILY} == odroidn2 ]] && LINUXFAMILY=meson64
+ 
+ 	# check what is available from the repository
+-	debconf-apt-progress -- apt-get update
++	pacman -Sy --noconfirm
+ 	LIST=($(apt-cache show linux-image*${LINUXFAMILY} | grep -E  "Package:|Version:|version:" \
+ 	| grep -v "Config-Version" | sed -n -e 's/^.*: //p' | sed 's/\.$//g'))
+ 	new_list=()
+@@ -522,7 +521,7 @@
+ 					# cleanup
+ 					find "/boot/" -name "System.map*" -type f -delete;	find "/boot/" -name "config*" -type f -delete
+ 					find "/boot/" -name "vmlinuz*" -type f -delete;	find "/boot/" -name "*nitrd*" -type f -delete
+-					apt clean
++					pacman -Sc --noconfirm
+ 					# BSP must be installed separate otherwise it won't work
+ 					debconf-apt-progress -- apt -o Dpkg::Options::="--force-confold" --force-yes -y -qq --allow-downgrades --no-install-recommends install linux-${DISTROID}-root${UPGRADE_ROOT}-${BOARD}
+ 					debconf-apt-progress -- apt -o Dpkg::Options::="--force-confold" --force-yes -y -qq --allow-downgrades --no-install-recommends install $PACKAGE_LIST
+@@ -757,7 +756,7 @@
+ 	if [ -n "$CHOSEN_USER" ]; then
+ 
+ 		# update packages
+-		debconf-apt-progress -- apt-get update
++		pacman -Sy --noconfirm
+ 
+ 		# install new package if exists
+ 		unset PACKAGE_SUFIX
+@@ -778,7 +777,7 @@
+ 		[[ $? -eq 130 ]] && dpkg --configure -a
+ 
+ 		# clean apt cache
+-		apt clean
++		pacman -Sc --noconfirm
+ 
+ 		# add user to groups
+ 		for additionalgroup in sudo netdev audio video dialout plugdev input bluetooth systemd-journal ssh; do
+diff -ruN --label upstream/usr/lib/orangepi-config --label src/usr/lib/orangepi-config upstream/usr/lib/orangepi-config src/usr/lib/orangepi-config
+--- upstream/usr/lib/orangepi-config
++++ src/usr/lib/orangepi-config
+@@ -32,9 +32,9 @@
+ 	#
+ 	"BT remove" )
+ 		if ! is_package_manager_running; then
+-			debconf-apt-progress -- apt-get -y remove bluetooth bluez bluez-tools
+-			check_if_installed xserver-xorg && debconf-apt-progress -- apt-get -y remove pulseaudio-module-bluetooth blueman
+-			debconf-apt-progress -- apt -y -qq autoremove
++			pacman -Rns --noconfirm bluetooth bluez bluez-tools
++			check_if_installed xserver-xorg && pacman -Rns --noconfirm pulseaudio-module-bluetooth blueman
++			pacman -Rns --noconfirm $(pacman -Qtdq 2>/dev/null) 2>/dev/null || true
+ 		fi
+ 	;;
+ 
+@@ -42,8 +42,8 @@
+ 	#
+ 	"BT install" )
+ 		if ! is_package_manager_running; then
+-			debconf-apt-progress -- apt-get -y install bluetooth bluez bluez-tools
+-			check_if_installed xserver-xorg && debconf-apt-progress -- apt-get -y --no-install-recommends install pulseaudio-module-bluetooth blueman
++			pacman -S --noconfirm --needed bluetooth bluez bluez-tools
++			check_if_installed xserver-xorg && pacman -S --noconfirm --needed pulseaudio-module-bluetooth blueman
+ 		fi
+ 	;;
+ 
+@@ -51,8 +51,8 @@
+ 	#
+ 	"Remove IR" )
+ 		if ! is_package_manager_running; then
+-			debconf-apt-progress -- apt-get -y remove lirc
+-			debconf-apt-progress -- apt -y -qq autoremove
++			pacman -Rns --noconfirm lirc
++			pacman -Rns --noconfirm $(pacman -Qtdq 2>/dev/null) 2>/dev/null || true
+ 		fi
+ 	;;
+ 
+@@ -60,7 +60,7 @@
+ 	#
+ 	"IR" )
+ 		if ! is_package_manager_running; then
+-			debconf-apt-progress -- apt-get -y --no-install-recommends install lirc
++			pacman -S --noconfirm --needed lirc
+ 		fi
+ 	;;
+ 
+@@ -75,7 +75,7 @@
+ 			TARGET_BRANCH=$BRANCH
+ 			exceptions "$BRANCH"
+ 			IFS='.' read -a array <<< $(uname -r)
+-			[[ -z $(dpkg -l | grep linux-headers) ]] && debconf-apt-progress -- apt-get -y \
++			[[ -z $(pacman -Q | grep linux-headers) ]] && debconf-apt-progress -- apt-get -y \
+ 			install linux-headers${TARGET_BRANCH}-${TARGET_FAMILY}
+ 			if (( "${array[0]}" == "4" )) && (( "${array[1]}" >= "1" )); then
+ 				rm -rf /usr/src/usb-redirector-linux-arm-gnueabi
+@@ -110,8 +110,8 @@
+ 			wget -q -O /usr/local/bin/sbc-bench https://gitee.com/leeboby/sbc-bench/raw/master/sbc-bench.sh
+ 
+ 			if [[ -z "$(command -v git)" ]]; then
+-			        sudo apt-get update
+-			        sudo apt-get install -y git
++			        sudo pacman -Sy --noconfirm
++			        pacman -S --noconfirm --needed git
+ 			fi
+ 			
+ 			chmod +x /usr/local/bin/sbc-bench
+@@ -171,7 +171,7 @@
+ 				else
+ 				INSTALL_PKG="linux-headers-$(uname -r | sed 's/'-$(dpkg --print-architecture)'//')";
+ 			fi
+-			debconf-apt-progress -- apt-get -y install ${INSTALL_PKG}
++			pacman -S --noconfirm --needed ${INSTALL_PKG}
+ 		fi
+ 	;;
+ 
+@@ -182,15 +182,15 @@
+ 	"Headers_remove" )
+ 		if ! is_package_manager_running; then
+ 			REMOVE_PKG="linux-headers-*"
+-			if [[ -n $(dpkg -l | grep linux-headers) ]]; then
+-				debconf-apt-progress -- apt-get -y purge ${REMOVE_PKG}
++			if [[ -n $(pacman -Q | grep linux-headers) ]]; then
++				pacman -Rns --noconfirm ${REMOVE_PKG}
+ 				rm -rf /usr/src/linux-headers*
+ 			else
+-				debconf-apt-progress -- apt-get -y install ${INSTALL_PKG}
++				pacman -S --noconfirm --needed ${INSTALL_PKG}
+ 			fi
+ 			# cleanup
+ 			apt clean
+-			debconf-apt-progress -- apt -y autoremove
++			pacman -Rns --noconfirm $(pacman -Qtdq 2>/dev/null) 2>/dev/null || true
+ 		fi
+ 	;;
+ 
+@@ -220,14 +220,14 @@
+ 
+ 			PACKAGE=$(echo "$selection" | sed "s/-current//" | sed "s/-dev//" | sed "s/-legacy//")
+ 			if [[ -n $PACKAGE ]]; then
+-				debconf-apt-progress -- apt-get -y install ${selection}
++				pacman -S --noconfirm --needed ${selection}
+ 				mkdir -p /usr/src/$PACKAGE
+ 				(pv -n /usr/src/$PACKAGE".tar.xz" | xz -d -T0 - | tar xf - -C /usr/src/$PACKAGE ) 2>&1 | dialog --colors --backtitle "$BACKTITLE" --title " Please wait! " --gauge "\nDecompressing kernel sources to /usr/src/$PACKAGE" 8 80
+ 				xz -d /usr/src/*config.xz --stdout > /usr/src/$PACKAGE/.config
+ 				rm /usr/src/$PACKAGE".tar.xz" /usr/src/*config.xz
+ 				apt clean
+-				debconf-apt-progress -- apt-get -y purge linux-source*
+-				debconf-apt-progress -- apt -y autoremove
++				pacman -Rns --noconfirm linux-source*
++				pacman -Rns --noconfirm $(pacman -Qtdq 2>/dev/null) 2>/dev/null || true
+ 				if [[ -z $scripted ]]; then
+ 					dialog --colors --backtitle "$BACKTITLE" --no-collapse --title " Kernel source " --clear --msgbox "\nYou will find pre-configured kernel sources in /usr/src/$PACKAGE" 7 72
+ 				fi
+@@ -265,8 +265,8 @@
+ 			if [[ -n $selection ]]; then
+ 				PACKAGE="linux-source-$(echo $selection | sed 's/[-|(|[:alpha:]|(|[:space:]|(|/]//g')-${BRANCH}-${LINUXFAMILY}"
+ 				if ls $selection 1> /dev/null 2>&1; then
+-					debconf-apt-progress -- apt-get -y purge $PACKAGE
+-					debconf-apt-progress -- apt -y autoremove
++					pacman -Rns --noconfirm $PACKAGE
++					pacman -Rns --noconfirm $(pacman -Qtdq 2>/dev/null) 2>/dev/null || true
+ 					apt clean
+ 					dialog --backtitle "$BACKTITLE" --title " Please wait " --infobox "\nRemoving $selection ... " 5 72
+ 					rm -r $selection
+@@ -286,8 +286,8 @@
+ 	#
+ 	"Full"|"Mini" )
+ 		if ! is_package_manager_running; then
+-			debconf-apt-progress -- apt-get -y purge orangepi-firmware* # workaround since pkg replace doesn't work properly
+-			debconf-apt-progress -- apt-get -y install orangepi-firmware$(echo -"${1,,}" | sed 's/-mini//')
++			pacman -Rns --noconfirm orangepi-firmware* # workaround since pkg replace doesn't work properly
++			pacman -S --noconfirm --needed orangepi-firmware$(echo -"${1,,}" | sed 's/-mini//')
+ 		fi
+ 	;;
+ 
+@@ -550,7 +550,7 @@
+ 				# display dialog
+ 				dialog --colors --backtitle "$BACKTITLE" --title "Please wait" --infobox \
+ 				"\nWireless adapter: \Z1${WIRELESS_ADAPTER}\Z0\n\nProbing nl80211 hostapd driver compatibility." 7 50
+-				#debconf-apt-progress -- apt-get --reinstall -o Dpkg::Options::="--force-confnew" -y -qq --no-install-recommends install hostapd
++				#pacman -S --noconfirm --needed hostapd
+ 				# change to selected interface
+ 				sed -i "s/^interface=.*/interface=$WIRELESS_ADAPTER/" /etc/hostapd.conf
+ 				# add hostapd.conf to services
+@@ -568,7 +568,7 @@
+ 				if [[ -n "$hostapd_error" ]]; then
+ 					dialog --colors --backtitle "$BACKTITLE" --title "Please wait" --infobox \
+ 					"\nWireless adapter: \Z1${WIRELESS_ADAPTER}\Z0\n\nProbing Realtek hostapd driver compatibility." 7 50
+-					debconf-apt-progress -- apt-get --reinstall -o Dpkg::Options::="--force-confnew" -y -qq --no-install-recommends install hostapd-realtek
++					pacman -S --noconfirm --needed hostapd-realtek
+ 					# change to selected interface
+ 					sed -i "s/^interface=.*/interface=$WIRELESS_ADAPTER/" /etc/hostapd.conf
+ 					# add allow cli access if not exists. temporally
+@@ -631,7 +631,7 @@
+ 
+ 						# install dnsmas and iptables
+ 						if [[ $(dpkg-query -W -f='${db:Status-Abbrev}\n' dnsmasq 2>/dev/null) != "*ii*" ]]; then
+-							debconf-apt-progress -- apt-get -qq -y --no-install-recommends install dnsmasq;
++							pacman -S --noconfirm --needed dnsmasq;
+ 							systemctl enable dnsmasq
+ 						fi
+ 
+@@ -919,8 +919,8 @@
+ 	"ZSH" )
+ 		if ! is_package_manager_running; then
+ 			if ! check_if_installed zsh ; then
+-				debconf-apt-progress -- apt-get update
+-				debconf-apt-progress -- apt-get install -y zsh tmux git
++				pacman -Sy --noconfirm
++				pacman -S --noconfirm --needed zsh tmux git
+ 			fi
+ 			rm -rf /etc/oh-my-zsh
+ 			git clone --quiet https://github.com/robbyrussell/oh-my-zsh.git /etc/oh-my-zsh
+@@ -975,8 +975,8 @@
+ 			dialog --title " Update " --backtitle "$BACKTITLE" --no-label "No" --yesno "\nDo you want to update board firmware?" 7 41
+ 			fi
+ 			if [[ $? -eq 0 ]]; then
+-				debconf-apt-progress -- apt-get update
+-				debconf-apt-progress -- apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -y upgrade
++				pacman -Sy --noconfirm
++				pacman -Su --noconfirm
+ 				[[ -z $scripted ]] && \
+ 				dialog --title " Firmware update " --colors --no-label "No" --backtitle "$BACKTITLE" --yesno \
+ 				"\nFirmware has been updated. Reboot?   " 7 39
+@@ -1062,8 +1062,8 @@
+ 		else
+ 			if ! is_package_manager_running; then
+ 				# remove nodm and install lightdm = backward compatibility
+-				[[ -n $(dpkg -l | grep nodm) ]] && debconf-apt-progress -- apt-get -y purge nodm
+-				[[ -z $(dpkg -l | grep lightdm) ]] && debconf-apt-progress -- apt-get -o Dpkg::Options::="--force-confold" -y --no-install-recommends install lightdm-gtk-greeter lightdm
++				[[ -n $(dpkg -l | grep nodm) ]] && pacman -Rns --noconfirm nodm
++				[[ -z $(dpkg -l | grep lightdm) ]] && pacman -S --noconfirm --needed lightdm-gtk-greeter lightdm
+ 				if [[ -n $DESKTOP_INSTALLED ]]; then
+ 					dialog --title " Display manager " --backtitle "$BACKTITLE" --yesno "\nDo you want to enable autologin?" 7 36
+ 					exitstatus=$?;
+@@ -1100,7 +1100,7 @@
+ 			systemctl disable xrdp.service >/dev/null 2>&1
+ 		else
+ 			if ! is_package_manager_running; then
+-				debconf-apt-progress -- apt-get -y install xrdp vnc4server xorgxrdp
++				pacman -S --noconfirm --needed xrdp vnc4server xorgxrdp
+ 				systemctl enable xrdp.service >/dev/null 2>&1
+ 				systemctl start xrdp.service >/dev/null 2>&1
+ 				dialog --title "Info" --backtitle "$BACKTITLE" --nocancel --no-collapse --pause \
+@@ -1112,34 +1112,34 @@
+ 
+ 	"Thunderbird" )
+ 		if ! check_if_installed thunderbird then ; then
+-			debconf-apt-progress -- apt-get -y install thunderbird
++			pacman -S --noconfirm --needed thunderbird
+ 		else
+-			debconf-apt-progress -- apt-get -y purge thunderbird
++			pacman -Rns --noconfirm thunderbird
+ 		fi
+ 	;;
+ 
+ 	"Gimp" )
+ 		if ! check_if_installed gimp then ; then
+-			debconf-apt-progress -- apt-get -y install gimp
++			pacman -S --noconfirm --needed gimp
+ 		else
+-			debconf-apt-progress -- apt-get -y purge gimp
++			pacman -Rns --noconfirm gimp
+ 		fi
+ 	;;
+ 
+ 	"Libre" )
+-		debconf-apt-progress -- apt-get -y purge libreoffice*
++		pacman -Rns --noconfirm libreoffice*
+ 	;;
+ 
+ 	"Writer" )
+ 		pkg_install="libreoffice-writer libreoffice-style-tango"
+ 		if [[ "$DISTROID" == "xenial" ]]; then pkg_install+=" libreoffice-gtk"; else pkg_install+=" libreoffice-gtk2"; fi
+-		debconf-apt-progress -- apt-get -y install $pkg_install
++		pacman -S --noconfirm --needed $pkg_install
+ 	;;
+ 
+ 	"Suite" )
+ 		pkg_install="libreoffice libreoffice-style-tango"
+ 		if [[ "$DISTROID" == "xenial" ]]; then pkg_install+=" libreoffice-gtk"; else pkg_install+=" libreoffice-gtk2"; fi
+-		debconf-apt-progress -- apt-get -y install $pkg_install
++		pacman -S --noconfirm --needed $pkg_install
+ 	;;
+ 
+ 
+@@ -1181,13 +1181,13 @@
+ 	"Avahi")
+ 	if ! is_package_manager_running; then
+ 		if check_if_installed avahi-daemon ; then
+-			service avahi-daemon stop
+-			debconf-apt-progress -- apt-get -y purge avahi-daemon
++			systemctl stop avahi-daemon 2>/dev/null
++			pacman -Rns --noconfirm avahi
+ 		else
+-			debconf-apt-progress -- apt-get -y install avahi-daemon
++			pacman -S --noconfirm --needed avahi
+ 			[[ -f /usr/share/doc/avahi-daemon/examples/sftp-ssh.service ]] && cp /usr/share/doc/avahi-daemon/examples/sftp-ssh.service /etc/avahi/services/
+ 			[[ -f /usr/share/doc/avahi-daemon/examples/ssh.service ]] && cp /usr/share/doc/avahi-daemon/examples/ssh.service /etc/avahi/services/
+-			service avahi-daemon restart
++			systemctl restart avahi-daemon 2>/dev/null
+ 		fi
+ 	fi
+ 	;;
+@@ -1357,10 +1357,10 @@
+ 	if ! is_package_manager_running; then
+ 		while true; do
+ 			if ! check_if_installed libpam-google-authenticator ; then
+-				debconf-apt-progress -- apt-get -y install libpam-google-authenticator
++				pacman -S --noconfirm --needed libpam-google-authenticator
+ 			fi
+ 			if ! check_if_installed qrencode ; then
+-				debconf-apt-progress -- apt-get -y install qrencode
++				pacman -S --noconfirm --needed qrencode
+ 			fi
+ 			DIALOG_CANCEL=2
+ 			DIALOG_ESC=255
+@@ -1562,7 +1562,7 @@
+ 		#		[[ $? = 0 ]] && overlayroot-chroot sed -i "s/^overlayroot=.*/overlayroot=\"\"/" /etc/overlayroot.conf && \
+ 		#		overlayroot-chroot rm /etc/update-motd.d/97-overlayroot && reboot
+ 		#	else
+-		#		debconf-apt-progress -- apt-get -o Dpkg::Options::="--force-confnew" -y --no-install-recommends install overlayroot
++		#		pacman -S --noconfirm --needed overlayroot
+ 		#		echo '#!/bin/bash' > /etc/update-motd.d/97-overlayroot
+ 		#		echo 'if [ -n "$(mount | grep -w tmpfs-root)" ]; then \
+ 		#		echo -e "[\e[0m \e[1mremember: your system is in virtual read only mode\e[0m ]\n";fi' >> /etc/update-motd.d/97-overlayroot
+@@ -1582,7 +1582,7 @@
+ 		else
+ 			if ! is_package_manager_running; then
+ 				if ! dpkg -l | grep -q "overlayroot"; then
+-					debconf-apt-progress -- apt-get update
++					pacman -Sy --noconfirm
+ 					apt -y install overlayroot > /dev/null 2>&1
+ 					[[ ! $? == 0 ]] && apt remove --purge -y overlayroot >/dev/null 2>&1 && return
+ 				fi
+diff -ruN --label upstream/usr/lib/orangepi-config --label src/usr/lib/orangepi-config upstream/usr/lib/orangepi-config src/usr/lib/orangepi-config
+--- upstream/usr/lib/orangepi-config
++++ src/usr/lib/orangepi-config
+@@ -84,7 +84,7 @@
+ 	[[ -z ${mark} ]] && [[ -f /etc/apt/sources.list.d/orangepi.list ]] && LIST+=( "Other" "Switch to other kernels" )
+ 
+ 	LIST+=( "SSH" "Reconfigure SSH daemon" )
+-	LIST+=( "Firmware" "Run apt update & apt upgrade" )
++	LIST+=( "Firmware" "Run pacman update & upgrade" )
+ 
+ 	if [[ "$SHELL" != "/bin/bash" ]]; then
+ 		LIST+=( "BASH" "Revert to stock BASH shell" )
